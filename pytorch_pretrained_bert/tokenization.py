@@ -88,10 +88,10 @@ class BertTokenizer(object):
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab)
         self.max_len = max_len if max_len is not None else int(1e12)
 
-    def tokenize(self, text):
+    def tokenize(self, text, **args):
         split_tokens = []
         for token in self.basic_tokenizer.tokenize(text):
-            for sub_token in self.wordpiece_tokenizer.tokenize(token):
+            for sub_token in self.wordpiece_tokenizer.tokenize(token, **args):
                 split_tokens.append(sub_token)
         return split_tokens
 
@@ -279,7 +279,7 @@ class WordpieceTokenizer(object):
         self.unk_token = unk_token
         self.max_input_chars_per_word = max_input_chars_per_word
 
-    def tokenize(self, text):
+    def tokenize(self, text, **args):
         """Tokenizes a piece of text into its word pieces.
 
         This uses a greedy longest-match-first algorithm to perform tokenization
@@ -296,7 +296,8 @@ class WordpieceTokenizer(object):
         Returns:
           A list of wordpiece tokens.
         """
-
+        complete_vocab_miss = args.get("complete_vocab_miss")
+        partial_vocab_miss = args.get("partial_vocab_miss")
         output_tokens = []
         for token in whitespace_tokenize(text):
             chars = list(token)
@@ -326,8 +327,12 @@ class WordpieceTokenizer(object):
 
             if is_bad:
                 output_tokens.append(self.unk_token)
+                if complete_vocab_miss is not None:
+                    complete_vocab_miss.append(token)
             else:
                 output_tokens.extend(sub_tokens)
+                if len(sub_tokens) >1 and partial_vocab_miss is not None:
+                    partial_vocab_miss.append(sub_tokens)
         return output_tokens
 
 

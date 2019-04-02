@@ -128,6 +128,7 @@ def read_newsqa_examples(input_file, is_training, version_2_with_negative):
     #Uncomment to manually validate the generated vs guessed answers
     clean_word_indexed_answers = open('./clean_word_indexed_answers', 'w+')
     unclean_char_indexed_answers_from_input = open('./unclean_char_indexed_answers_from_input', 'w+')
+    cleaned_word_indexed_text = ""
 
     """Read a SQuAD json file into a list of SquadExample."""
     with open(input_file, "r", encoding='utf-8') as reader:
@@ -314,8 +315,13 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
     unique_id = 1000000000
     unknowns = {}
     features = []
+    complete_vocab_miss = []
+    partial_vocab_miss = []
+
     for (example_index, example) in enumerate(examples):
-        query_tokens = tokenizer.tokenize(example.question_text)
+        query_tokens = tokenizer.tokenize(example.question_text,\
+                                          complete_vocab_miss = complete_vocab_miss,\
+                                          partial_vocab_miss = partial_vocab_miss)
 
         if len(query_tokens) > max_query_length:
             query_tokens = query_tokens[0:max_query_length]
@@ -325,7 +331,9 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
         all_doc_tokens = []
         for (i, token) in enumerate(example.doc_tokens):
             orig_to_tok_index.append(len(all_doc_tokens))
-            sub_tokens = tokenizer.tokenize(token)
+            sub_tokens = tokenizer.tokenize(token,\
+                                          complete_vocab_miss = complete_vocab_miss,\
+                                          partial_vocab_miss = partial_vocab_miss)
             for sub_token in sub_tokens:
                 tok_to_orig_index.append(i)
                 all_doc_tokens.append(sub_token)
@@ -343,7 +351,9 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                 tok_end_position = len(all_doc_tokens) - 1
             (tok_start_position, tok_end_position) = _improve_answer_span(
                 all_doc_tokens, tok_start_position, tok_end_position, tokenizer,
-                example.orig_answer_text)
+                example.orig_answer_text,
+                complete_vocab_miss = complete_vocab_miss,
+                partial_vocab_miss = partial_vocab_miss)
 
         # The -3 accounts for [CLS], [SEP] and [SEP]
         max_tokens_for_doc = max_seq_length - len(query_tokens) - 3
@@ -470,14 +480,21 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
                     is_impossible=example.is_impossible))
             unique_id += 1
 
-    with open("unknown_tokens", "w") as writer:
+    with open("unknown_tokens_cased", "w") as writer:
         writer.write(json.dumps(unknowns, indent=4) + "\n")
-
+    with open("complete_vocab_miss", "w") as complete_vocab_miss_writer:
+        complete_vocab_miss_writer.write(json.dumps(complete_vocab_miss, indent=4) + "\n")
+    with open("partial_vocab_miss", "w") as partial_vocab_miss_writer:
+        partial_vocab_miss_writer.write(json.dumps(partial_vocab_miss, indent=4) + "\n")
+    with open("partial_vocab_miss_count", "w") as partial_vocab_miss_count_writer:
+        partial_vocab_miss_count_writer.write(json.dumps(len(partial_vocab_miss), indent=4) + "\n")
+    with open("complete_vocab_miss_count", "w") as complete_vocab_miss_count_writer:
+        complete_vocab_miss_count_writer.write(json.dumps(len(complete_vocab_miss), indent=4) + "\n")
     return features
 
 
 def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer,
-                         orig_answer_text):
+                         orig_answer_text, **args):
     """Returns tokenized answer spans that better match the annotated answer."""
 
     # The SQuAD annotations are character based. We first project them to
